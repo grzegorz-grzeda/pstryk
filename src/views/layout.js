@@ -1,3 +1,4 @@
+import { VERSION } from '../version.js';
 import { csrfField, html } from './html.js';
 
 const NAV = [
@@ -46,5 +47,6 @@ ${flash?.error || flash?.info
 </div>`
   : ''}
 ${body}
+${admin ? html`<footer class="muted">Pstryk ${VERSION}</footer>` : ''}
 </main></body></html>`;
 }
