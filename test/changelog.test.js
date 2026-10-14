@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { checkChangelog, compareSemver, parseSemver, releaseNotes } from '../scripts/changelog.js';
+import { checkChangelog, compareSemver, parseSemver, prepareRelease, releaseNotes, suggestVersion } from '../scripts/changelog.js';
 
 describe('semver', () => {
   test('accepts valid and rejects invalid versions', () => {
@@ -80,5 +80,70 @@ describe('changelog check', () => {
     const text = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
     const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
     assert.deepEqual(checkChangelog(text, version), []);
+  });
+});
+
+const withUnreleased = (latest, entries) => `# Changelog
+
+## [Unreleased]
+
+${entries}
+
+## [${latest}] - 2026-10-14
+
+### Added
+
+- First.
+
+[Unreleased]: https://github.com/o/r/compare/v${latest}...HEAD
+[${latest}]: https://github.com/o/r/releases/tag/v${latest}
+`;
+
+describe('suggest next version', () => {
+  test('0.y.z: breaking bumps MINOR, everything else PATCH', () => {
+    assert.equal(suggestVersion(withUnreleased('0.1.0', '### Added\n\n- New thing.')).version, '0.1.1');
+    assert.equal(suggestVersion(withUnreleased('0.1.3', '### Fixed\n\n- Bug.')).version, '0.1.4');
+    assert.equal(suggestVersion(withUnreleased('0.1.3', '### Changed\n\n- **Breaking:** renamed X.')).version, '0.2.0');
+    assert.equal(suggestVersion(withUnreleased('0.1.3', '### Removed\n\n- Old flag.')).version, '0.2.0');
+  });
+
+  test('1.0.0 and later: MAJOR / MINOR / PATCH', () => {
+    assert.equal(suggestVersion(withUnreleased('1.4.2', '### Fixed\n\n- Bug.\n\n### Security\n\n- CVE.')).version, '1.4.3');
+    assert.equal(suggestVersion(withUnreleased('1.4.2', '### Added\n\n- Feature.\n\n### Fixed\n\n- Bug.')).version, '1.5.0');
+    assert.equal(suggestVersion(withUnreleased('1.4.2', '### Changed\n\n- **Breaking:** new env name.')).version, '2.0.0');
+  });
+
+  test('after a pre-release, suggests its final version; nothing to release when empty', () => {
+    assert.equal(suggestVersion(withUnreleased('2.0.0-rc.1', '### Fixed\n\n- Bug.')).version, '2.0.0');
+    assert.equal(suggestVersion(withUnreleased('0.1.0', '')).version, null);
+  });
+});
+
+describe('prepare release', () => {
+  const before = withUnreleased('0.1.0', '### Added\n\n- Editable actions.');
+
+  test('moves [Unreleased] into a dated section and updates links', () => {
+    const after = prepareRelease(before, '0.1.1', '2026-10-20');
+    assert.match(after, /## \[Unreleased\]\n\n## \[0\.1\.1\] - 2026-10-20\n\n### Added\n\n- Editable actions\.\n\n## \[0\.1\.0\]/);
+    assert.match(after, /^\[Unreleased\]: https:\/\/github\.com\/o\/r\/compare\/v0\.1\.1\.\.\.HEAD$/m);
+    assert.match(after, /^\[0\.1\.1\]: https:\/\/github\.com\/o\/r\/compare\/v0\.1\.0\.\.\.v0\.1\.1$/m);
+    assert.deepEqual(checkChangelog(after, '0.1.1'), []);
+    assert.equal(releaseNotes(after, '0.1.1'), '### Added\n\n- Editable actions.');
+    assert.equal(suggestVersion(after).version, null, 'new [Unreleased] is empty');
+  });
+
+  test('refuses bad input', () => {
+    assert.throws(() => prepareRelease(before, '0.1', '2026-10-20'), /not a valid SemVer/);
+    assert.throws(() => prepareRelease(before, '0.1.0', '2026-10-20'), /already in the changelog/);
+    assert.throws(() => prepareRelease(before, '0.0.9', '2026-10-20'), /must be greater/);
+    assert.throws(() => prepareRelease(before, '0.1.1', '20-10-2026'), /not a valid YYYY-MM-DD/);
+    assert.throws(() => prepareRelease(withUnreleased('0.1.0', ''), '0.1.1', '2026-10-20'), /nothing to release/);
+  });
+
+  test('works on the real changelog format', () => {
+    const real = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8')
+      .replace('## [Unreleased]\n', '## [Unreleased]\n\n### Fixed\n\n- Something.\n');
+    const after = prepareRelease(real, '0.1.1', '2026-10-20');
+    assert.deepEqual(checkChangelog(after, '0.1.1'), []);
   });
 });

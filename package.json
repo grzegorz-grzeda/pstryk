@@ -8,7 +8,8 @@
     "test": "node --test",
     "lint": "eslint .",
     "changelog:check": "node scripts/changelog.js check",
-    "changelog:notes": "node scripts/changelog.js notes"
+    "changelog:notes": "node scripts/changelog.js notes",
+    "changelog:suggest": "node scripts/changelog.js suggest"
   },
   "repository": {
     "type": "git",

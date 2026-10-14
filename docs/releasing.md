@@ -40,16 +40,14 @@ dates, allowed group names, link references, and `package.json` matching the new
 
 ## Cutting a release
 
-1. Decide the version from the `[Unreleased]` entries, using the table above.
-2. On a branch, edit `CHANGELOG.md`:
-   - Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (today, UTC) and add a fresh empty
-     `## [Unreleased]` above it.
-   - Update the links at the bottom:
+With Claude Code, ask for a release ("release the next version"). The `release` skill in
+`.claude/skills/release/` runs these steps and asks before choosing the version and before pushing the tag.
 
-     ```
-     [Unreleased]: https://github.com/grzegorz-grzeda/pstryk/compare/vX.Y.Z...HEAD
-     [X.Y.Z]: https://github.com/grzegorz-grzeda/pstryk/compare/vPREVIOUS...vX.Y.Z
-     ```
+1. Decide the version from the `[Unreleased]` entries, using the table above.
+   `npm run changelog:suggest` proposes one and says why.
+2. On a branch `release/X.Y.Z`, run `node scripts/changelog.js release X.Y.Z`. It turns `[Unreleased]`
+   into `## [X.Y.Z] - <today, UTC>`, adds a fresh empty `[Unreleased]`, and updates the comparison
+   links at the bottom.
 3. Set the version in `package.json` and `package-lock.json` with `npm version X.Y.Z --no-git-tag-version`.
 4. Run `npm run changelog:check && npm test`, open a pull request titled "Release X.Y.Z", and merge it.
 5. Tag the merge commit on `main` and push the tag:
