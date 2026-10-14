@@ -70,7 +70,8 @@ Docker image, and on `main` publishes to ghcr.io and deploys over SSH.
 - **Every behaviour change adds a user-facing entry under `## [Unreleased]` in `CHANGELOG.md`**
   (Added / Changed / Deprecated / Removed / Fixed / Security; prefix breaking ones with **Breaking:**).
   Skip refactors, tests and CI-only changes.
-- Don't bump `package.json` or tag in feature PRs; releases are their own PR (see `docs/releasing.md`).
+- Don't bump `package.json` or tag in feature PRs; releases are their own PR. To release, use the
+  `release` skill (`.claude/skills/release/SKILL.md`).
   `npm run changelog:check` must pass (CI runs it).
 
 ## Git
