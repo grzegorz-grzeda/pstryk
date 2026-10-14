@@ -1,4 +1,38 @@
-import { csrfField, fmtDate, html } from './html.js';
+import { csrfField, fmtDate, html, SafeHtml } from './html.js';
+
+const QOS_OPTIONS = [
+  [0, '0 – at most once'],
+  [1, '1 – at least once'],
+  [2, '2 – exactly once'],
+];
+
+/** Topic, payload, QoS and retain inputs, shared by the add and edit forms. */
+function actionFields(values = {}) {
+  const qos = values.qos ?? 1;
+  return html`
+    <label>Topic<input type="text" name="topic" required maxlength="1024" placeholder="home/{{body.room}}/light/set" value="${values.topic ?? ''}"></label>
+    <label>Payload<textarea name="payload" maxlength="65536" placeholder='{"state": {{body.state|json}}, "at": "{{now}}"}'>${values.payload ?? ''}</textarea></label>
+    <div class="grid2">
+      <label>QoS<select name="qos">${QOS_OPTIONS.map(([value, label]) => html`<option value="${value}" ${value === qos ? new SafeHtml('selected') : ''}>${label}</option>`)}</select></label>
+      <label class="check"><input type="checkbox" name="retain" ${values.retain ? new SafeHtml('checked') : ''}> Retain</label>
+    </div>
+    <p class="muted mb0">Placeholders: <code>{{body.x}}</code>, <code>{{query.x}}</code>, <code>{{hook.name}}</code>, <code>{{now}}</code>, <code>{{ts}}</code>. Add <code>|json</code> to JSON-encode a value.</p>`;
+}
+
+export function actionEditPage({ hook, action, csrf, values }) {
+  const base = `/admin/hooks/${hook._id}`;
+  const position = hook.actions.findIndex((a) => a.id === action.id) + 1;
+  return html`
+<p class="mb0"><a href="${base}">← Back to <code>${hook.name}</code></a></p>
+<section class="mt">
+  <h2>Edit action ${position} of ${hook.actions.length} <span class="muted">· hook <code>${hook.name}</code></span></h2>
+  <form class="stack" method="post" action="${base}/actions/${action.id}">
+    ${csrfField(csrf)}
+    ${actionFields(values ?? action)}
+    <div class="row-actions"><button type="submit">Save action</button><a class="button ghost" href="${base}">Cancel</a></div>
+  </form>
+</section>`;
+}
 
 export function hooksPage({ hooks, csrf }) {
   return html`
@@ -28,7 +62,7 @@ export function hooksPage({ hooks, csrf }) {
 </section>`;
 }
 
-export function hookPage({ hook, calls, csrf, publicUrl, newToken, testResult, testBody, allowQueryToken }) {
+export function hookPage({ hook, calls, csrf, publicUrl, newToken, testResult, testBody, allowQueryToken, actionDraft }) {
   const url = `${publicUrl || ''}/h/${hook.name}`;
   const base = `/admin/hooks/${hook._id}`;
   return html`
@@ -57,19 +91,16 @@ export function hookPage({ hook, calls, csrf, publicUrl, newToken, testResult, t
       <td><pre>${a.payload}</pre></td>
       <td>${a.qos}</td>
       <td>${a.retain ? 'yes' : 'no'}</td>
-      <td><form class="inline" method="post" action="${base}/actions/${a.id}/delete" data-confirm="Remove this action?">${csrfField(csrf)}<button class="danger" type="submit">Remove</button></form></td>
+      <td><div class="row-actions">
+        <a class="button ghost" href="${base}/actions/${a.id}/edit">Edit</a>
+        <form class="inline" method="post" action="${base}/actions/${a.id}/delete" data-confirm="Remove this action?">${csrfField(csrf)}<button class="danger" type="submit">Remove</button></form>
+      </div></td>
     </tr>`)}
   </table></div>`}
   <h2 class="mt">Add action</h2>
   <form class="stack" method="post" action="${base}/actions">
     ${csrfField(csrf)}
-    <label>Topic<input type="text" name="topic" required maxlength="1024" placeholder="home/{{body.room}}/light/set"></label>
-    <label>Payload<textarea name="payload" maxlength="65536" placeholder='{"state": {{body.state|json}}, "at": "{{now}}"}'></textarea></label>
-    <div class="grid2">
-      <label>QoS<select name="qos"><option value="0">0 – at most once</option><option value="1" selected>1 – at least once</option><option value="2">2 – exactly once</option></select></label>
-      <label class="check"><input type="checkbox" name="retain"> Retain</label>
-    </div>
-    <p class="muted mb0">Placeholders: <code>{{body.x}}</code>, <code>{{query.x}}</code>, <code>{{hook.name}}</code>, <code>{{now}}</code>, <code>{{ts}}</code>. Add <code>|json</code> to JSON-encode a value.</p>
+    ${actionFields(actionDraft)}
     <div><button type="submit">Add action</button></div>
   </form>
 </section>

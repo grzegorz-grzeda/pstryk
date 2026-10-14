@@ -120,6 +120,15 @@ export class MongoStore {
     await this.hooks.updateOne({ _id: hookId }, { $pull: { actions: { id: actionId } } });
   }
 
+  /** Replaces an action's settings in place, keeping its ID and position. Returns false if it doesn't exist. */
+  async updateAction(hookId, actionId, { topic, payload, qos, retain }) {
+    const result = await this.hooks.updateOne(
+      { _id: hookId, 'actions.id': actionId },
+      { $set: { 'actions.$.topic': topic, 'actions.$.payload': payload, 'actions.$.qos': qos, 'actions.$.retain': retain } },
+    );
+    return result.matchedCount === 1;
+  }
+
   async addToken(hookId, { label, hash, hint }) {
     const entry = { id: newId(), label, hash, hint, createdAt: new Date(), lastUsedAt: null };
     await this.hooks.updateOne({ _id: hookId }, { $push: { tokens: entry } });
@@ -342,6 +351,13 @@ export class MemoryStore {
   async removeAction(hookId, actionId) {
     const hook = this.hooks.get(hookId);
     if (hook) hook.actions = hook.actions.filter((a) => a.id !== actionId);
+  }
+
+  async updateAction(hookId, actionId, { topic, payload, qos, retain }) {
+    const action = this.hooks.get(hookId)?.actions.find((a) => a.id === actionId);
+    if (!action) return false;
+    Object.assign(action, { topic, payload, qos, retain });
+    return true;
   }
 
   async addToken(hookId, { label, hash, hint }) {

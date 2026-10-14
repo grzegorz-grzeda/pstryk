@@ -189,7 +189,8 @@ describe('protection', () => {
   test('pages contain no inline scripts or styles (CSP compatible)', async () => {
     await browser.post('/admin/hooks', { name: 'lights' });
     const hook = await store.getHookByName('lights');
-    for (const url of ['/admin', '/admin?range=7d', '/admin/hooks', `/admin/hooks/${hook._id}`, '/admin/account', '/admin/users', '/admin/audit', '/admin/login']) {
+    const action = await store.addAction(hook._id, { topic: 'a/b', payload: '', qos: 0, retain: false });
+    for (const url of ['/admin', '/admin?range=7d', '/admin/hooks', `/admin/hooks/${hook._id}`, `/admin/hooks/${hook._id}/actions/${action.id}/edit`, '/admin/account', '/admin/users', '/admin/audit', '/admin/login']) {
       const { body } = await browser.get(url);
       assert.doesNotMatch(body, /<script>|<style>|style="|onsubmit=|onclick=/, url);
     }
@@ -224,6 +225,77 @@ describe('hooks UI', () => {
     ]);
     const audit = await browser.get('/admin/audit');
     assert.match(audit.body, /Created token/);
+  });
+
+  test('actions can be edited in place', async () => {
+    await browser.login();
+    await browser.get('/admin');
+    await browser.post('/admin/hooks', { name: 'lights' });
+    const hook = await store.getHookByName('lights');
+    const base = `/admin/hooks/${hook._id}`;
+    await browser.get(base);
+    await browser.post(`${base}/actions`, { topic: 'home/first', payload: 'one', qos: '0' });
+    await browser.post(`${base}/actions`, { topic: 'home/{{body.room}}/light', payload: '{"on": {{body.on}}}', qos: '1', retain: 'on' });
+    const [first, second] = (await store.getHook(hook._id)).actions;
+
+    // The hook page links to the edit form, which is pre-filled.
+    assert.match((await browser.get(base)).body, new RegExp(`${base}/actions/${second.id}/edit`));
+    const form = await browser.get(`${base}/actions/${second.id}/edit`);
+    assert.equal(form.statusCode, 200);
+    assert.match(form.body, /Edit action 2 of 2/);
+    assert.match(form.body, /value="home\/\{\{body.room\}\}\/light"/);
+    assert.match(form.body, /<option value="1" selected>/);
+    assert.match(form.body, /name="retain" checked/);
+
+    // Invalid input is rejected, keeps what was typed, and changes nothing.
+    const bad = await browser.post(`${base}/actions/${second.id}`, { topic: 'home/#', payload: 'kept text', qos: '2' });
+    assert.equal(bad.statusCode, 400);
+    assert.match(bad.body, /wildcards/);
+    assert.match(bad.body, /kept text/);
+    assert.equal((await store.getHook(hook._id)).actions[1].topic, 'home/{{body.room}}/light');
+
+    // A valid edit keeps the action's ID and position.
+    const ok = await browser.post(`${base}/actions/${second.id}`, { topic: 'zigbee2mqtt/{{body.room}}/set', payload: '{"state": {{body.state|json}}}', qos: '2' });
+    assert.equal(ok.headers.location, base);
+    const actions = (await store.getHook(hook._id)).actions;
+    assert.deepEqual(actions.map((a) => a.id), [first.id, second.id]);
+    assert.deepEqual(actions[1], { id: second.id, topic: 'zigbee2mqtt/{{body.room}}/set', payload: '{"state": {{body.state|json}}}', qos: 2, retain: false });
+    assert.match((await browser.get(base)).body, /Action saved/);
+
+    const [entry] = await store.listAudit(1);
+    assert.equal(entry.action, 'action.update');
+    assert.equal(entry.detail.previousTopic, 'home/{{body.room}}/light');
+    assert.equal(entry.detail.changed, 'topic, payload, qos, retain');
+
+    // Test fire uses the edited action.
+    await browser.post(`${base}/test`, { body: JSON.stringify({ room: 'hall', state: 'ON' }) });
+    assert.deepEqual(publisher.published.at(-1), { topic: 'zigbee2mqtt/hall/set', payload: '{"state": "ON"}', qos: 2, retain: false });
+  });
+
+  test('editing unknown actions or without CSRF fails', async () => {
+    await browser.login();
+    await browser.get('/admin');
+    await browser.post('/admin/hooks', { name: 'lights' });
+    const hook = await store.getHookByName('lights');
+    await store.addAction(hook._id, { topic: 'a/b', payload: '', qos: 0, retain: false });
+    const [action] = (await store.getHook(hook._id)).actions;
+    assert.equal((await browser.get(`/admin/hooks/${hook._id}/actions/nope/edit`)).statusCode, 404);
+    assert.equal((await browser.post(`/admin/hooks/${hook._id}/actions/nope`, { topic: 'x/y', qos: '0' })).statusCode, 404);
+    assert.equal((await browser.post(`/admin/hooks/${hook._id}/actions/${action.id}`, { topic: 'x/y', qos: '0', _csrf: 'forged' })).statusCode, 403);
+    assert.equal((await store.getHook(hook._id)).actions[0].topic, 'a/b');
+  });
+
+  test('a rejected new action keeps the typed values', async () => {
+    await browser.login();
+    await browser.get('/admin');
+    await browser.post('/admin/hooks', { name: 'lights' });
+    const hook = await store.getHookByName('lights');
+    await browser.get(`/admin/hooks/${hook._id}`);
+    const res = await browser.post(`/admin/hooks/${hook._id}/actions`, { topic: 'bad/+', payload: 'my payload', qos: '2', retain: 'on' });
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body, /value="bad\/\+"/);
+    assert.match(res.body, /my payload<\/textarea>/);
+    assert.match(res.body, /<option value="2" selected>/);
   });
 
   test('flash messages show once', async () => {

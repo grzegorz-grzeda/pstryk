@@ -3,9 +3,27 @@ import { PublishError } from '../../mqtt.js';
 import { DuplicateError } from '../../store.js';
 import { checkTemplate, TemplateError } from '../../template.js';
 import { generateToken } from '../../tokens.js';
-import { hookPage, hooksPage } from '../../views/hooks.js';
+import { actionEditPage, hookPage, hooksPage } from '../../views/hooks.js';
 import { HOOK_NAME } from '../webhook.js';
 import { field } from './util.js';
+
+/** Reads and validates the action form shared by "add" and "edit". */
+function readAction(body) {
+  const action = {
+    topic: field(body, 'topic', 2000),
+    payload: typeof body?.payload === 'string' ? body.payload : '',
+    qos: Number.parseInt(body?.qos, 10),
+    retain: body?.retain === 'on',
+  };
+  const problems = [
+    ...checkTemplate(action.topic, { topic: true }),
+    ...checkTemplate(action.payload),
+    ...([0, 1, 2].includes(action.qos) ? [] : ['QoS must be 0, 1 or 2']),
+  ];
+  if (!problems.length) return { action, problems };
+  // Keep what was typed so the form can be shown again; fall back to QoS 1 for the select.
+  return { action: { ...action, qos: [0, 1, 2].includes(action.qos) ? action.qos : 1 }, problems };
+}
 
 export default async function hookRoutes(app, { store, publisher, config, audit, render, redirectWith }) {
   const loadHook = async (request, reply) => {
@@ -70,18 +88,49 @@ export default async function hookRoutes(app, { store, publisher, config, audit,
   app.post('/hooks/:id/actions', async (request, reply) => {
     const hook = await loadHook(request, reply);
     if (!hook) return;
-    const topic = field(request.body, 'topic', 2000);
-    const payload = typeof request.body?.payload === 'string' ? request.body.payload : '';
-    const qos = Number.parseInt(request.body?.qos, 10);
-    const problems = [
-      ...checkTemplate(topic, { topic: true }),
-      ...checkTemplate(payload),
-      ...([0, 1, 2].includes(qos) ? [] : ['QoS must be 0, 1 or 2']),
-    ];
-    if (problems.length) return renderHook(request, reply, hook, { status: 400, flash: { error: problems.join('. ') } });
-    await store.addAction(hook._id, { topic, payload, qos, retain: request.body?.retain === 'on' });
-    await audit(request, 'action.add', { hook: hook.name, topic });
+    const { action, problems } = readAction(request.body);
+    if (problems.length) {
+      return renderHook(request, reply, hook, { status: 400, flash: { error: problems.join('. ') }, actionDraft: action });
+    }
+    await store.addAction(hook._id, action);
+    await audit(request, 'action.add', { hook: hook.name, topic: action.topic });
     return reply.redirect(`/admin/hooks/${hook._id}`);
+  });
+
+  const loadAction = (hook, reply, actionId) => {
+    const action = hook.actions.find((a) => a.id === actionId);
+    if (!action) reply.code(404).type('text/plain').send('Action not found');
+    return action;
+  };
+
+  const renderActionEdit = (request, reply, hook, action, { status, flash, values } = {}) =>
+    render(request, reply, { title: `Edit action · ${hook.name}`, active: 'hooks', status, flash }, actionEditPage({ hook, action, csrf: request.session.csrf, values }));
+
+  app.get('/hooks/:id/actions/:actionId/edit', async (request, reply) => {
+    const hook = await loadHook(request, reply);
+    const action = hook && loadAction(hook, reply, request.params.actionId);
+    if (action) return renderActionEdit(request, reply, hook, action);
+  });
+
+  app.post('/hooks/:id/actions/:actionId', async (request, reply) => {
+    const hook = await loadHook(request, reply);
+    const current = hook && loadAction(hook, reply, request.params.actionId);
+    if (!current) return;
+    const { action, problems } = readAction(request.body);
+    if (problems.length) {
+      return renderActionEdit(request, reply, hook, current, { status: 400, flash: { error: problems.join('. ') }, values: action });
+    }
+    if (!(await store.updateAction(hook._id, current.id, action))) {
+      return redirectWith(request, reply, `/admin/hooks/${hook._id}`, { error: 'That action no longer exists' });
+    }
+    const changed = ['topic', 'payload', 'qos', 'retain'].filter((key) => current[key] !== action[key]);
+    await audit(request, 'action.update', {
+      hook: hook.name,
+      topic: action.topic,
+      ...(changed.includes('topic') ? { previousTopic: current.topic } : {}),
+      changed: changed.join(', ') || 'nothing',
+    });
+    return redirectWith(request, reply, `/admin/hooks/${hook._id}`, { info: changed.length ? 'Action saved.' : 'No changes.' });
   });
 
   app.post('/hooks/:id/actions/:actionId/delete', async (request, reply) => {

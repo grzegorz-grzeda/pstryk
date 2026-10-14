@@ -116,6 +116,7 @@ const AUDIT_LABELS = {
   'hook.update': 'Updated hook',
   'hook.delete': 'Deleted hook',
   'action.add': 'Added action',
+  'action.update': 'Updated action',
   'action.remove': 'Removed action',
   'token.create': 'Created token',
   'token.revoke': 'Revoked token',
