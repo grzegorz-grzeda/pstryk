@@ -52,6 +52,7 @@ curl -X POST https://pstryk.example.com/h/lights \
 | [Webhook API & templates](docs/api.md) | Authentication, request formats, status codes, template syntax and examples |
 | [Deployment](docs/deployment.md) | VPS + Atlas setup, automatic deploys from GitHub Actions, broker options, operations |
 | [Admin security](docs/security.md) | How sign-in, sessions, 2FA and lockouts work; the recovery CLI |
+| [Versioning & releases](docs/releasing.md) | SemVer policy, changelog rules, how to cut a release |
 | [Development](docs/development.md) | Running locally, tests, code layout, design notes |
 | [`.env.example`](.env.example) | Every configuration variable, with comments |
 
@@ -65,6 +66,10 @@ docker compose up -d
 
 Open `https://<your-domain>/admin`, sign in, and turn on two-factor authentication under **Account**.
 See [deployment](docs/deployment.md) for the full guide.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Versions follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## License
 

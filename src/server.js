@@ -4,6 +4,7 @@ import { ensureFirstAdmin } from './auth/bootstrap.js';
 import { loadConfig } from './config.js';
 import { createPublisher } from './mqtt.js';
 import { MongoStore } from './store.js';
+import { VERSION } from './version.js';
 
 let config;
 try {
@@ -14,6 +15,7 @@ try {
 }
 
 const logger = pino({ level: config.logLevel });
+logger.info({ version: VERSION }, 'Starting Pstryk');
 const store = await MongoStore.connect({ uri: config.mongoUri, dbName: config.mongoDb, callLogDays: config.callLogDays });
 try {
   await ensureFirstAdmin(store, config, logger);

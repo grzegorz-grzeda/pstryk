@@ -11,6 +11,7 @@ import { checkPasswordPolicy, hashPassword } from './auth/passwords.js';
 import { LoginThrottle } from './auth/throttle.js';
 import { MongoStore } from './store.js';
 import { USERNAME } from './routes/admin/util.js';
+import { VERSION } from './version.js';
 
 const USAGE = `Usage: node src/cli.js <command> [username]
 
@@ -133,6 +134,10 @@ function terminalIo() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
+  if (args[0] === '--version') {
+    console.log(VERSION);
+    process.exit(0);
+  }
   if (!args.length || ['help', '--help', '-h'].includes(args[0])) {
     console.log(USAGE);
     process.exit(0);
