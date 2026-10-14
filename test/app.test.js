@@ -1,4 +1,4 @@
-// End-to-end tests: real Fastify app, real MQTT client against an in-process broker,
+// Webhook end-to-end tests: real Fastify app, real MQTT client against an in-process broker,
 // in-memory store in place of MongoDB.
 
 import assert from 'node:assert/strict';
@@ -11,8 +11,8 @@ import { buildApp } from '../src/app.js';
 import { createPublisher } from '../src/mqtt.js';
 import { MemoryStore } from '../src/store.js';
 import { generateToken } from '../src/tokens.js';
+import { testConfig } from './helpers.js';
 
-const ADMIN = 'Basic ' + Buffer.from('admin:correct-horse-battery').toString('base64');
 const silent = { info() {}, warn() {}, error() {} };
 
 let broker, brokerServer, publisher, subscriber, received;
@@ -40,11 +40,7 @@ after(async () => {
 });
 
 async function makeApp(overrides = {}) {
-  const config = {
-    trustProxy: false, bodyLimit: 1024, rateLimitMax: 1000, allowQueryToken: false, publicUrl: '',
-    adminUser: 'admin', adminPassword: 'correct-horse-battery', ...overrides,
-  };
-  return buildApp({ config, store, publisher, logger: false });
+  return buildApp({ config: testConfig({ bodyLimit: 1024, ...overrides }), store, publisher, logger: false });
 }
 
 async function waitForMessages(n) {
@@ -145,74 +141,6 @@ describe('webhook', () => {
     const codes = [];
     for (let i = 0; i < 3; i++) codes.push((await limited.inject({ method: 'POST', url: '/h/lights', payload: {} })).statusCode);
     assert.deepEqual(codes, [401, 401, 429]);
-  });
-});
-
-describe('admin', () => {
-  test('requires basic auth', async () => {
-    assert.equal((await app.inject({ url: '/admin' })).statusCode, 401);
-    const bad = 'Basic ' + Buffer.from('admin:wrong').toString('base64');
-    assert.equal((await app.inject({ url: '/admin', headers: { authorization: bad } })).statusCode, 401);
-    const res = await app.inject({ url: '/admin', headers: { authorization: ADMIN } });
-    assert.equal(res.statusCode, 200);
-    assert.match(res.body, /lights/);
-  });
-
-  test('blocks cross-site posts', async () => {
-    const res = await app.inject({
-      method: 'POST', url: '/admin/hooks', headers: { authorization: ADMIN, origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' },
-      payload: 'name=evil',
-    });
-    assert.equal(res.statusCode, 403);
-  });
-
-  test('creates a hook, action and token through forms', async () => {
-    const form = { authorization: ADMIN, 'content-type': 'application/x-www-form-urlencoded' };
-    const created = await app.inject({ method: 'POST', url: '/admin/hooks', headers: form, payload: 'name=garage&description=Door' });
-    assert.equal(created.statusCode, 302);
-    const id = created.headers.location.split('/').pop();
-
-    const bad = await app.inject({ method: 'POST', url: `/admin/hooks/${id}/actions`, headers: form, payload: 'topic=garage/%23&payload=x&qos=1' });
-    assert.equal(bad.statusCode, 400);
-
-    const ok = await app.inject({ method: 'POST', url: `/admin/hooks/${id}/actions`, headers: form, payload: 'topic=garage/cmd&payload=open&qos=1&retain=on' });
-    assert.equal(ok.statusCode, 302);
-
-    const tokenPage = await app.inject({ method: 'POST', url: `/admin/hooks/${id}/tokens`, headers: form, payload: 'label=tasker' });
-    assert.equal(tokenPage.statusCode, 200);
-    assert.equal(tokenPage.headers['cache-control'], 'no-store');
-    const newToken = tokenPage.body.match(/pstk_[A-Za-z0-9_-]{43}/)[0];
-
-    const call = await app.inject({ method: 'POST', url: '/h/garage', headers: { authorization: `Bearer ${newToken}` } });
-    assert.equal(call.statusCode, 200);
-    const [msg] = await waitForMessages(1);
-    assert.deepEqual([msg.topic, msg.payload], ['garage/cmd', 'open']);
-
-    // A client subscribing later still gets the retained message.
-    const late = await mqtt.connectAsync(`mqtt://127.0.0.1:${brokerServer.address().port}`);
-    const retained = new Promise((resolve) => late.on('message', (topic, payload, packet) => resolve({ topic, payload: payload.toString(), retain: packet.retain })));
-    await late.subscribeAsync('garage/cmd');
-    assert.deepEqual(await retained, { topic: 'garage/cmd', payload: 'open', retain: true });
-    await late.endAsync();
-  });
-
-  test('duplicate and invalid hook names are rejected', async () => {
-    const form = { authorization: ADMIN, 'content-type': 'application/x-www-form-urlencoded' };
-    const dup = await app.inject({ method: 'POST', url: '/admin/hooks', headers: form, payload: 'name=lights' });
-    assert.match(dup.headers.location, /error=/);
-    const bad = await app.inject({ method: 'POST', url: '/admin/hooks', headers: form, payload: 'name=Bad Name!' });
-    assert.match(bad.headers.location, /error=/);
-  });
-
-  test('test fire publishes and escapes output', async () => {
-    const form = { authorization: ADMIN, 'content-type': 'application/x-www-form-urlencoded' };
-    const body = encodeURIComponent(JSON.stringify({ room: 'office', on: '<script>' }));
-    const res = await app.inject({ method: 'POST', url: `/admin/hooks/${hook._id}/test`, headers: form, payload: `body=${body}` });
-    assert.equal(res.statusCode, 200);
-    assert.match(res.body, /Published 1 message/);
-    assert.doesNotMatch(res.body, /<script>/);
-    const [msg] = await waitForMessages(1);
-    assert.equal(msg.topic, 'home/office/light');
   });
 });
 

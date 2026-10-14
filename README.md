@@ -21,6 +21,9 @@ phone / script / IFTTT / Home Assistant
 - **Templates**: topics and payloads are filled from the request, e.g. `home/{{body.room}}/light`, with
   guards so callers can't escape the configured topic.
 - **Admin UI** at `/admin`: manage hooks, actions and tokens, test-fire hooks, and browse recent calls.
+- **Hardened admin sign-in**: scrypt-hashed passwords, optional two-factor authentication (TOTP), account
+  and IP lockouts, server-side sessions with timeouts, CSRF protection, a strict Content Security Policy,
+  multiple admins and an audit log.
 - **Stack**: Node.js 22, Fastify, MongoDB (Atlas), mqtt.js, Docker and Caddy.
 
 ## Quick example
@@ -46,6 +49,7 @@ curl -X POST https://pstryk.example.com/h/lights \
 |---|---|
 | [Webhook API & templates](docs/api.md) | Authentication, request formats, status codes, template syntax and examples |
 | [Deployment](docs/deployment.md) | VPS + Atlas setup, automatic deploys from GitHub Actions, broker options, operations |
+| [Admin security](docs/security.md) | How sign-in, sessions, 2FA and lockouts work; the recovery CLI |
 | [Development](docs/development.md) | Running locally, tests, code layout, design notes |
 | [`.env.example`](.env.example) | Every configuration variable, with comments |
 
@@ -53,11 +57,12 @@ curl -X POST https://pstryk.example.com/h/lights \
 
 ```sh
 git clone https://github.com/grzegorz-grzeda/pstryk.git && cd pstryk
-cp .env.example .env    # set domain, MongoDB URI, MQTT URL and admin password
+cp .env.example .env    # set domain, MongoDB URI, MQTT URL and the first admin's password
 docker compose up -d
 ```
 
-Open `https://<your-domain>/admin`. See [deployment](docs/deployment.md) for the full guide.
+Open `https://<your-domain>/admin`, sign in, and turn on two-factor authentication under **Account**.
+See [deployment](docs/deployment.md) for the full guide.
 
 ## License
 

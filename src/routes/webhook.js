@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import { buildContext, fireHook } from '../fire.js';
 import { PublishError } from '../mqtt.js';
 import { TemplateError } from '../template.js';
@@ -14,6 +15,8 @@ function presentedToken(request, allowQueryToken) {
 }
 
 export default async function webhookRoutes(app, { store, publisher, config }) {
+  await app.register(rateLimit, { global: false });
+
   app.route({
     method: ['GET', 'POST'],
     url: '/h/:name',

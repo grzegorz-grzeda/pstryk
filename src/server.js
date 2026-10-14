@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { buildApp } from './app.js';
+import { ensureFirstAdmin } from './auth/bootstrap.js';
 import { loadConfig } from './config.js';
 import { createPublisher } from './mqtt.js';
 import { MongoStore } from './store.js';
@@ -14,6 +15,14 @@ try {
 
 const logger = pino({ level: config.logLevel });
 const store = await MongoStore.connect({ uri: config.mongoUri, dbName: config.mongoDb, callLogDays: config.callLogDays });
+try {
+  await ensureFirstAdmin(store, config, logger);
+} catch (err) {
+  logger.fatal(err.message);
+  await store.close();
+  process.exit(1);
+}
+
 const publisher = createPublisher(config, logger.child({ component: 'mqtt' }));
 const app = await buildApp({ config, store, publisher, logger });
 

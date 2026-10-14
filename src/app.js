@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import formbody from '@fastify/formbody';
-import rateLimit from '@fastify/rate-limit';
-import adminRoutes from './routes/admin.js';
+import adminArea from './routes/admin/index.js';
 import webhookRoutes from './routes/webhook.js';
 
 /** Builds the HTTP app. Store and publisher are injected so tests can swap them. */
@@ -13,7 +12,6 @@ export async function buildApp({ config, store, publisher, logger }) {
   });
 
   await app.register(formbody);
-  await app.register(rateLimit, { global: false });
 
   app.get('/', (request, reply) => reply.redirect('/admin'));
 
@@ -29,7 +27,7 @@ export async function buildApp({ config, store, publisher, logger }) {
   });
 
   await app.register(webhookRoutes, { store, publisher, config });
-  await app.register(adminRoutes, { prefix: '/admin', store, publisher, config });
+  await app.register(adminArea, { prefix: '/admin', store, publisher, config });
 
   return app;
 }

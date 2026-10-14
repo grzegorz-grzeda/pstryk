@@ -26,7 +26,7 @@ with a TTL index that deletes call history after `CALL_LOG_DAYS`.
 git clone https://github.com/grzegorz-grzeda/pstryk.git ~/pstryk
 cd ~/pstryk
 cp .env.example .env
-nano .env        # PSTRYK_DOMAIN, PUBLIC_URL, MONGODB_URI, MQTT_*, ADMIN_PASSWORD
+nano .env        # PSTRYK_DOMAIN, PUBLIC_URL, MONGODB_URI, MQTT_*, ADMIN_USER, ADMIN_PASSWORD
 docker compose pull
 docker compose up -d
 docker compose logs -f pstryk
@@ -35,7 +35,14 @@ docker compose logs -f pstryk
 `docker compose pull` fetches the image that CI built (`ghcr.io/grzegorz-grzeda/pstryk:latest`). To
 build on the server instead, run `docker compose up -d --build`.
 
-Then open `https://<your-domain>/admin`.
+Then open `https://<your-domain>/admin` and sign in. On the first start, Pstryk creates the admin
+account from `ADMIN_USER`/`ADMIN_PASSWORD`. After signing in:
+
+1. Turn on two-factor authentication under **Account**.
+2. Remove `ADMIN_PASSWORD` from `.env` and run `docker compose up -d`. The variable is only needed
+   to create the first account.
+
+See [security.md](security.md) for how sign-in works, and for the recovery CLI in case you get locked out.
 
 > **Image visibility:** container packages on GHCR start out private, even for a public repository.
 > After the first CI run, open the package (GitHub profile → Packages → pstryk → Package settings) and
@@ -136,11 +143,13 @@ add a TLS listener on 8883 to `deploy/mosquitto/mosquitto.conf` and publish only
 | Status / health | `docker compose ps`, `curl https://<domain>/healthz` |
 | Restart | `docker compose restart pstryk` |
 | Change config | Edit `.env`, then `docker compose up -d` |
+| Locked out / lost 2FA | `docker compose exec pstryk node src/cli.js reset-password <user>` (see [security.md](security.md#recovery-the-command-line-tool)) |
 | Back up hooks | Atlas backups, or `mongodump --uri "$MONGODB_URI" --db pstryk --collection hooks` |
 
 ### Hardening checklist
 
-- [ ] Strong `ADMIN_PASSWORD` (20+ random characters).
+- [ ] Long, unique admin passwords, with two-factor authentication on for every admin.
+- [ ] `ADMIN_PASSWORD` removed from `.env` after the first start.
 - [ ] Atlas Network Access limited to the VPS IP.
 - [ ] VPS firewall allows only 22, 80 and 443 (`ufw allow OpenSSH && ufw allow 80,443/tcp && ufw enable`).
 - [ ] SSH key login only, with password authentication disabled.

@@ -34,8 +34,14 @@ export function loadConfig(env = process.env) {
     mqttPassword: env.MQTT_PASSWORD || undefined,
     mqttClientId: env.MQTT_CLIENT_ID || undefined,
 
-    adminUser: env.ADMIN_USER || 'admin',
-    adminPassword: required('ADMIN_PASSWORD'),
+    // Only used to create the first admin account when none exists yet.
+    adminUser: (env.ADMIN_USER || 'admin').toLowerCase(),
+    adminPassword: env.ADMIN_PASSWORD || undefined,
+
+    sessionIdleMinutes: int(env.SESSION_IDLE_MINUTES, 30),
+    sessionMaxHours: int(env.SESSION_MAX_HOURS, 12),
+    // Secure cookies need HTTPS. Defaults to on unless PUBLIC_URL is plain http://.
+    cookieSecure: bool(env.COOKIE_SECURE, !(env.PUBLIC_URL || '').startsWith('http://')),
 
     allowQueryToken: bool(env.ALLOW_QUERY_TOKEN, false),
     rateLimitMax: int(env.RATE_LIMIT_MAX, 60),
@@ -43,9 +49,8 @@ export function loadConfig(env = process.env) {
     callLogDays: int(env.CALL_LOG_DAYS, 30),
   };
 
-  if (config.adminPassword && config.adminPassword.length < 12) {
-    errors.push('ADMIN_PASSWORD must be at least 12 characters');
-  }
+  if (config.sessionIdleMinutes < 1) errors.push('SESSION_IDLE_MINUTES must be at least 1');
+  if (config.sessionMaxHours < 1) errors.push('SESSION_MAX_HOURS must be at least 1');
   if (errors.length) throw new Error(`Invalid configuration:\n  - ${errors.join('\n  - ')}`);
   return config;
 }
