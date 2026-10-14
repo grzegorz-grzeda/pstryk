@@ -101,3 +101,4 @@ table.num td + td, table.num th + th { text-align:right; font-variant-numeric:ta
 .tooltip .key-ok { background:var(--series-ok); }
 .tooltip .key-failed { background:var(--series-failed); }
 @media (forced-colors: active) { svg.chart .bar-ok { fill:CanvasText; } svg.chart .bar-failed { fill:Highlight; } .swatch-ok { background:CanvasText; } .swatch-failed { background:Highlight; } }
+footer { margin-top:32px; font-size:12px; text-align:center; }

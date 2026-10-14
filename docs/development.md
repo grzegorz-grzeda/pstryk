@@ -8,6 +8,7 @@ Requires Node.js 22+.
 npm install
 npm test          # node:test, with no external services needed
 npm run lint      # ESLint
+npm run changelog:check   # CHANGELOG.md is valid and matches package.json
 ```
 
 To run the server you need a MongoDB database and an MQTT broker. A free Atlas cluster works, or use local containers:
@@ -61,12 +62,15 @@ src/
   tokens.js          token generation, hashing and constant-time matching
   mqtt.js            persistent MQTT connection; fails fast when disconnected
   store.js           MongoStore (production) and MemoryStore (tests)
+scripts/
+  changelog.js       changelog check and release-notes extraction (used by CI)
 test/
   template.test.js   template rendering and validation
   app.test.js        webhook end-to-end tests with a real MQTT client and an in-process broker (aedes)
   admin.test.js      admin end-to-end tests: sign-in, lockouts, sessions, CSRF, 2FA, users
   auth.test.js       password hashing, TOTP (RFC 6238 vectors), throttling
   cli.test.js        first-admin bootstrap and the CLI
+  changelog.test.js  SemVer parsing/precedence and changelog validation
   dashboard.test.js  dashboard aggregation and page rendering
   helpers.js         test app factory and a cookie-keeping "browser"
 ```

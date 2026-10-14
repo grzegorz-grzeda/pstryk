@@ -8,6 +8,7 @@ admin UI at `/admin`. Node.js 22 (ESM, no build step), Fastify 5, MongoDB driver
 ```sh
 npm test        # node:test, all of test/*.test.js; no external services needed (~15 s, scrypt is slow on purpose)
 npm run lint    # ESLint flat config; CI fails on any error
+npm run changelog:check   # CHANGELOG.md format + SemVer + matches package.json
 node --test test/admin.test.js   # one file
 node src/cli.js --help           # admin account recovery CLI (needs MONGODB_URI)
 ```
@@ -61,6 +62,16 @@ Docker image, and on `main` publishes to ghcr.io and deploys over SSH.
 - For UI changes, render the page and look at it (Playwright and Chromium are preinstalled in cloud
   sessions): start an app over `MemoryStore` with seeded data, sign in, and screenshot it in light,
   dark and phone (390 px) views.
+
+## Versioning and changelog
+
+- SemVer 2.0.0; currently `0.y.z` (initial development: breaking → MINOR, else PATCH). Details,
+  including what counts as the public API, are in `docs/releasing.md`.
+- **Every behaviour change adds a user-facing entry under `## [Unreleased]` in `CHANGELOG.md`**
+  (Added / Changed / Deprecated / Removed / Fixed / Security; prefix breaking ones with **Breaking:**).
+  Skip refactors, tests and CI-only changes.
+- Don't bump `package.json` or tag in feature PRs; releases are their own PR (see `docs/releasing.md`).
+  `npm run changelog:check` must pass (CI runs it).
 
 ## Git
 
