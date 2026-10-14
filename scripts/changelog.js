@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 // Changelog tooling (Keep a Changelog 1.1.0 + Semantic Versioning 2.0.0).
 //
-//   node scripts/changelog.js check            validate CHANGELOG.md against package.json (run in CI)
-//   node scripts/changelog.js notes <version>  print the release notes for one version
+//   node scripts/changelog.js check              validate CHANGELOG.md against package.json (run in CI)
+//   node scripts/changelog.js notes <version>    print the release notes for one version
+//   node scripts/changelog.js suggest            propose the next version from the [Unreleased] entries
+//   node scripts/changelog.js release <version> [--date YYYY-MM-DD]
+//                                                turn [Unreleased] into a dated release section (edits the file)
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // The official SemVer 2.0.0 regular expression (https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string).
@@ -117,6 +120,68 @@ export function checkChangelog(text, packageVersion) {
   return problems;
 }
 
+/**
+ * Proposes the next version from the [Unreleased] entries (policy: docs/releasing.md).
+ * Breaking = a "### Removed" group or an entry marked **Breaking:**.
+ *   0.y.z:  breaking → 0.(y+1).0, anything else → 0.y.(z+1)
+ *   ≥1.0.0: breaking → major, Added/Changed/Deprecated → minor, Fixed/Security only → patch
+ */
+export function suggestVersion(text) {
+  const { releases } = parseChangelog(text);
+  const unreleased = releases.find((r) => r.name === 'Unreleased');
+  if (!unreleased?.body) return { version: null, reason: '[Unreleased] has no entries, so there is nothing to release' };
+  const latest = releases.find((r) => r.name !== 'Unreleased' && parseSemver(r.name));
+  const groups = new Set([...unreleased.body.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim()));
+  const breaking = groups.has('Removed') || /\*\*Breaking:?\*\*/i.test(unreleased.body);
+  const features = ['Added', 'Changed', 'Deprecated'].some((g) => groups.has(g));
+  if (!latest) return { version: '0.1.0', reason: 'first release' };
+  const v = parseSemver(latest.name);
+  if (v.prerelease.length) {
+    return { version: `${v.major}.${v.minor}.${v.patch}`, reason: `${latest.name} is a pre-release; the natural next step is its final version (or another pre-release)` };
+  }
+  if (v.major === 0) {
+    return breaking
+      ? { version: `0.${v.minor + 1}.0`, reason: 'breaking change during 0.y.z: bump MINOR' }
+      : { version: `0.${v.minor}.${v.patch + 1}`, reason: 'no breaking change during 0.y.z: bump PATCH' };
+  }
+  if (breaking) return { version: `${v.major + 1}.0.0`, reason: 'breaking change: bump MAJOR' };
+  if (features) return { version: `${v.major}.${v.minor + 1}.0`, reason: 'new or changed behaviour: bump MINOR' };
+  return { version: `${v.major}.${v.minor}.${v.patch + 1}`, reason: 'fixes only: bump PATCH' };
+}
+
+/**
+ * Returns the changelog text with [Unreleased] released as `version` on `date`, a new empty
+ * [Unreleased] section above it, and the link references updated. Throws on invalid input.
+ */
+export function prepareRelease(text, version, date) {
+  if (!parseSemver(version)) throw new Error(`"${version}" is not a valid SemVer 2.0.0 version`);
+  if (!isValidDate(date)) throw new Error(`"${date}" is not a valid YYYY-MM-DD date`);
+  const { releases } = parseChangelog(text);
+  const unreleased = releases.find((r) => r.name === 'Unreleased');
+  if (!unreleased) throw new Error('No ## [Unreleased] section');
+  if (!unreleased.body) throw new Error('[Unreleased] has no entries, so there is nothing to release');
+  if (releases.some((r) => r.name === version)) throw new Error(`Version ${version} is already in the changelog`);
+  const latest = releases.find((r) => r.name !== 'Unreleased');
+  if (latest && compareSemver(version, latest.name) <= 0) throw new Error(`${version} must be greater than the latest release ${latest.name}`);
+
+  const lines = text.split('\n');
+  const headingIndex = lines.findIndex((l) => /^## \[Unreleased\]\s*$/.test(l));
+  lines.splice(headingIndex + 1, 0, '', `## [${version}] - ${date}`);
+
+  const linkIndex = lines.findIndex((l) => /^\[Unreleased\]: /.test(l));
+  if (linkIndex === -1) throw new Error('No "[Unreleased]: …" link reference at the bottom');
+  const link = /^\[Unreleased\]: (\S+?)\/compare\/v(\S+)\.\.\.HEAD$/.exec(lines[linkIndex]);
+  if (!link) throw new Error('The [Unreleased] link must look like "[Unreleased]: <repo>/compare/v<latest>...HEAD"');
+  const [, repo, previous] = link;
+  lines.splice(
+    linkIndex,
+    1,
+    `[Unreleased]: ${repo}/compare/v${version}...HEAD`,
+    `[${version}]: ${repo}/compare/v${previous}...v${version}`,
+  );
+  return lines.join('\n');
+}
+
 export function releaseNotes(text, version) {
   const release = parseChangelog(text).releases.find((r) => r.name === version);
   return release ? release.body : null;
@@ -142,8 +207,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       process.exit(1);
     }
     console.log(notes);
+  } else if (command === 'suggest') {
+    const { version: next, reason } = suggestVersion(changelog);
+    if (!next) {
+      console.error(reason);
+      process.exit(1);
+    }
+    console.log(`${next}\t(${reason})`);
+  } else if (command === 'release' && arg) {
+    const dateFlag = process.argv.indexOf('--date');
+    const date = dateFlag > -1 ? process.argv[dateFlag + 1] : new Date().toISOString().slice(0, 10);
+    try {
+      writeFileSync(new URL('CHANGELOG.md', root), prepareRelease(changelog, arg.replace(/^v/, ''), date));
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    console.log(`CHANGELOG.md: released ${arg.replace(/^v/, '')} dated ${date}. Now set package.json: npm version ${arg.replace(/^v/, '')} --no-git-tag-version`);
   } else {
-    console.error('Usage: node scripts/changelog.js check | notes <version>');
+    console.error('Usage: node scripts/changelog.js check | notes <version> | suggest | release <version> [--date YYYY-MM-DD]');
     process.exit(2);
   }
 }
