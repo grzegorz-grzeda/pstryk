@@ -20,7 +20,9 @@ phone / script / IFTTT / Home Assistant
 - **Tokens**: random, shown once, stored only as hashes, labelled per caller and revocable individually.
 - **Templates**: topics and payloads are filled from the request, e.g. `home/{{body.room}}/light`, with
   guards so callers can't escape the configured topic.
-- **Admin UI** at `/admin`: manage hooks, actions and tokens, test-fire hooks, and browse recent calls.
+- **Dashboard** at `/admin`: call volume over 24 h / 7 days / 30 days (delivered vs failed), success rate,
+  per-hook activity, latest calls, failed sign-ins, and MQTT/database status.
+- **Admin UI**: manage hooks, actions and tokens, test-fire hooks, and browse each hook's recent calls.
 - **Hardened admin sign-in**: scrypt-hashed passwords, optional two-factor authentication (TOTP), account
   and IP lockouts, server-side sessions with timeouts, CSRF protection, a strict Content Security Policy,
   multiple admins and an audit log.

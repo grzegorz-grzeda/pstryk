@@ -25,6 +25,13 @@ function newAdmin(username, passwordHash) {
   };
 }
 
+function auditQuery({ actions, since } = {}) {
+  return { ...(actions ? { action: { $in: actions } } : {}), ...(since ? { at: { $gte: since } } : {}) };
+}
+
+const auditMatches = ({ actions, since } = {}) => (entry) =>
+  (!actions || actions.includes(entry.action)) && (!since || entry.at >= since);
+
 export class MongoStore {
   static async connect({ uri, dbName, callLogDays }) {
     const client = new MongoClient(uri);
@@ -134,8 +141,55 @@ export class MongoStore {
     await this.calls.insertOne({ _id: newId(), at: new Date(), ...entry });
   }
 
+  /** Latest calls of one hook, or of all hooks when hookId is null. */
   recentCalls(hookId, limit = 20) {
-    return this.calls.find({ hookId }).sort({ at: -1 }).limit(limit).toArray();
+    return this.calls.find(hookId ? { hookId } : {}).sort({ at: -1 }).limit(limit).toArray();
+  }
+
+  /**
+   * Call counts in [since, until): per time bucket (index = whole bucketMs steps from since)
+   * and per hook, with each hook's latest call. Failed = HTTP status 300 or above.
+   */
+  async callStats({ since, until, bucketMs }) {
+    const failed = { $cond: [{ $gte: ['$status', 300] }, 1, 0] };
+    const [result] = await this.calls
+      .aggregate([
+        { $match: { at: { $gte: since, $lt: until } } },
+        {
+          $facet: {
+            buckets: [
+              { $group: { _id: { $floor: { $divide: [{ $subtract: ['$at', since] }, bucketMs] } }, total: { $sum: 1 }, failed: { $sum: failed } } },
+            ],
+            perHook: [
+              { $sort: { at: -1 } },
+              {
+                $group: {
+                  _id: '$hookId',
+                  hookName: { $first: '$hookName' },
+                  total: { $sum: 1 },
+                  failed: { $sum: failed },
+                  lastAt: { $first: '$at' },
+                  lastStatus: { $first: '$status' },
+                },
+              },
+            ],
+          },
+        },
+      ])
+      .toArray();
+    return {
+      buckets: result.buckets.map((b) => ({ index: b._id, total: b.total, failed: b.failed })),
+      perHook: result.perHook.map(({ _id, ...rest }) => ({ hookId: _id, ...rest })),
+    };
+  }
+
+  async callTotals({ since, until }) {
+    const match = { at: { $gte: since, $lt: until } };
+    const [total, failed] = await Promise.all([
+      this.calls.countDocuments(match),
+      this.calls.countDocuments({ ...match, status: { $gte: 300 } }),
+    ]);
+    return { total, failed };
   }
 
   // --- admin accounts ---
@@ -223,8 +277,12 @@ export class MongoStore {
     await this.audit.insertOne({ _id: newId(), at: new Date(), ...entry });
   }
 
-  listAudit(limit = 200) {
-    return this.audit.find({}).sort({ at: -1 }).limit(limit).toArray();
+  listAudit(limit = 200, filter = {}) {
+    return this.audit.find(auditQuery(filter)).sort({ at: -1 }).limit(limit).toArray();
+  }
+
+  countAudit(filter = {}) {
+    return this.audit.countDocuments(auditQuery(filter));
   }
 
   close() {
@@ -308,10 +366,34 @@ export class MemoryStore {
 
   async recentCalls(hookId, limit = 20) {
     return this.calls
-      .filter((c) => c.hookId === hookId)
+      .filter((c) => !hookId || c.hookId === hookId)
       .sort((a, b) => b.at - a.at)
       .slice(0, limit)
       .map((item) => structuredClone(item));
+  }
+
+  async callStats({ since, until, bucketMs }) {
+    const buckets = new Map();
+    const perHook = new Map();
+    const inRange = this.calls.filter((c) => c.at >= since && c.at < until).sort((a, b) => b.at - a.at);
+    for (const call of inRange) {
+      const failed = call.status >= 300 ? 1 : 0;
+      const index = Math.floor((call.at - since) / bucketMs);
+      const bucket = buckets.get(index) ?? { index, total: 0, failed: 0 };
+      bucket.total += 1;
+      bucket.failed += failed;
+      buckets.set(index, bucket);
+      const hook = perHook.get(call.hookId) ?? { hookId: call.hookId, hookName: call.hookName, total: 0, failed: 0, lastAt: call.at, lastStatus: call.status };
+      hook.total += 1;
+      hook.failed += failed;
+      perHook.set(call.hookId, hook);
+    }
+    return { buckets: [...buckets.values()], perHook: [...perHook.values()] };
+  }
+
+  async callTotals({ since, until }) {
+    const inRange = this.calls.filter((c) => c.at >= since && c.at < until);
+    return { total: inRange.length, failed: inRange.filter((c) => c.status >= 300).length };
   }
 
   // --- admin accounts ---
@@ -406,8 +488,12 @@ export class MemoryStore {
     this.audit.push({ _id: newId(), at: new Date(), ...structuredClone(entry) });
   }
 
-  async listAudit(limit = 200) {
-    return this.audit.slice().reverse().slice(0, limit).map((item) => structuredClone(item));
+  async listAudit(limit = 200, filter = {}) {
+    return this.audit.filter(auditMatches(filter)).reverse().slice(0, limit).map((item) => structuredClone(item));
+  }
+
+  async countAudit(filter = {}) {
+    return this.audit.filter(auditMatches(filter)).length;
   }
 
   async close() {}

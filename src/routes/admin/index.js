@@ -11,6 +11,7 @@ import { layout } from '../../views/layout.js';
 import accountRoutes from './account.js';
 import auditRoutes from './audit.js';
 import authRoutes from './auth.js';
+import dashboardRoutes from './dashboard.js';
 import hookRoutes from './hooks.js';
 import userRoutes from './users.js';
 
@@ -135,6 +136,7 @@ export default async function adminArea(app, { store, publisher, config }) {
       request.admin = admin;
     });
 
+    await secured.register(dashboardRoutes, ctx);
     await secured.register(hookRoutes, ctx);
     await secured.register(accountRoutes, ctx);
     await secured.register(userRoutes, ctx);

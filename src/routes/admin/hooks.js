@@ -24,7 +24,7 @@ export default async function hookRoutes(app, { store, publisher, config, audit,
     );
   };
 
-  app.get('/', async (request, reply) => {
+  app.get('/hooks', async (request, reply) => {
     const hooks = await store.listHooks();
     return render(request, reply, { active: 'hooks' }, hooksPage({ hooks, csrf: request.session.csrf }));
   });
@@ -33,14 +33,14 @@ export default async function hookRoutes(app, { store, publisher, config, audit,
     const name = field(request.body, 'name', 100).toLowerCase();
     const description = field(request.body, 'description', 200);
     if (!HOOK_NAME.test(name)) {
-      return redirectWith(request, reply, '/admin', { error: 'Invalid name: use a-z, 0-9, - and _ (max 64 characters)' });
+      return redirectWith(request, reply, '/admin/hooks', { error: 'Invalid name: use a-z, 0-9, - and _ (max 64 characters)' });
     }
     try {
       const hook = await store.createHook({ name, description });
       await audit(request, 'hook.create', { hook: name });
       return reply.redirect(`/admin/hooks/${hook._id}`);
     } catch (err) {
-      if (err instanceof DuplicateError) return redirectWith(request, reply, '/admin', { error: err.message });
+      if (err instanceof DuplicateError) return redirectWith(request, reply, '/admin/hooks', { error: err.message });
       throw err;
     }
   });
@@ -64,7 +64,7 @@ export default async function hookRoutes(app, { store, publisher, config, audit,
     if (!hook) return;
     await store.deleteHook(hook._id);
     await audit(request, 'hook.delete', { hook: hook.name });
-    return redirectWith(request, reply, '/admin', { info: `Deleted hook ${hook.name}.` });
+    return redirectWith(request, reply, '/admin/hooks', { info: `Deleted hook ${hook.name}.` });
   });
 
   app.post('/hooks/:id/actions', async (request, reply) => {

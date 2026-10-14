@@ -1,7 +1,8 @@
 import { csrfField, html } from './html.js';
 
 const NAV = [
-  ['hooks', '/admin', 'Hooks'],
+  ['dashboard', '/admin', 'Dashboard'],
+  ['hooks', '/admin/hooks', 'Hooks'],
   ['users', '/admin/users', 'Users'],
   ['audit', '/admin/audit', 'Audit log'],
   ['account', '/admin/account', 'Account'],

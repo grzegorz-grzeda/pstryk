@@ -20,7 +20,7 @@ const auditActions = async () => (await store.listAudit()).map((e) => e.action);
 
 describe('sign-in', () => {
   test('admin pages redirect to the sign-in page', async () => {
-    for (const url of ['/admin', '/admin/users', '/admin/account', '/admin/audit']) {
+    for (const url of ['/admin', '/admin/hooks', '/admin/users', '/admin/account', '/admin/audit']) {
       const res = await browser.get(url);
       assert.equal(res.statusCode, 302, url);
       assert.equal(res.headers.location, '/admin/login');
@@ -189,7 +189,7 @@ describe('protection', () => {
   test('pages contain no inline scripts or styles (CSP compatible)', async () => {
     await browser.post('/admin/hooks', { name: 'lights' });
     const hook = await store.getHookByName('lights');
-    for (const url of ['/admin', `/admin/hooks/${hook._id}`, '/admin/account', '/admin/users', '/admin/audit', '/admin/login']) {
+    for (const url of ['/admin', '/admin?range=7d', '/admin/hooks', `/admin/hooks/${hook._id}`, '/admin/account', '/admin/users', '/admin/audit', '/admin/login']) {
       const { body } = await browser.get(url);
       assert.doesNotMatch(body, /<script>|<style>|style="|onsubmit=|onclick=/, url);
     }
@@ -230,8 +230,8 @@ describe('hooks UI', () => {
     await browser.login();
     await browser.get('/admin');
     await browser.post('/admin/hooks', { name: 'Bad Name!' });
-    assert.match((await browser.get('/admin')).body, /Invalid name/);
-    assert.doesNotMatch((await browser.get('/admin')).body, /Invalid name/);
+    assert.match((await browser.get('/admin/hooks')).body, /Invalid name/);
+    assert.doesNotMatch((await browser.get('/admin/hooks')).body, /Invalid name/);
   });
 });
 

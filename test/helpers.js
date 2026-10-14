@@ -13,6 +13,7 @@ export function testConfig(overrides = {}) {
     sessionIdleMinutes: 30,
     sessionMaxHours: 12,
     cookieSecure: false,
+    callLogDays: 30,
     ...overrides,
   };
 }

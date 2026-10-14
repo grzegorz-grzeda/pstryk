@@ -41,6 +41,7 @@ src/
   routes/admin/
     index.js         admin area: security headers, rate limit, cross-site check, session + CSRF gate
     auth.js          sign-in, 2FA step, sign-out
+    dashboard.js     /admin home: stats, chart, per-hook activity
     hooks.js         hooks, actions, tokens, test fire
     account.js       password change, 2FA setup, active sessions
     users.js         add and remove admins
@@ -54,6 +55,7 @@ src/
     bootstrap.js     creates the first admin from the environment
   views/             HTML templates (tagged template literals with auto-escaping)
   static/            admin.css and admin.js; no inline code, so the strict CSP holds
+  dashboard.js       dashboard numbers: time windows, bucketed call counts, per-hook stats
   template.js        {{ placeholder }} rendering and validation
   fire.js            renders all of a hook's actions, then publishes them
   tokens.js          token generation, hashing and constant-time matching
@@ -65,6 +67,7 @@ test/
   admin.test.js      admin end-to-end tests: sign-in, lockouts, sessions, CSRF, 2FA, users
   auth.test.js       password hashing, TOTP (RFC 6238 vectors), throttling
   cli.test.js        first-admin bootstrap and the CLI
+  dashboard.test.js  dashboard aggregation and page rendering
   helpers.js         test app factory and a cookie-keeping "browser"
 ```
 
@@ -106,6 +109,9 @@ A TTL index on `at` expires these after `CALL_LOG_DAYS`.
   leaves a half-applied set of messages.
 - **Fail fast on MQTT:** when the broker is down, calls return 503 immediately instead of being queued
   and replayed later. A delayed "open the garage" is worse than a failed one.
+- **Dashboard numbers** are aggregated in MongoDB (`$facet` over the `calls` collection), so the page
+  stays fast as the call log grows. The chart is server-rendered SVG coloured through CSS classes,
+  so it works under the strict CSP; `static/admin.js` only adds hover/focus tooltips.
 - **The store interface** is a small set of async methods, so `MemoryStore` can stand in for MongoDB
   in tests. `MongoStore` itself isn't covered by the test suite. Exercise it against a real database
   when you change it.

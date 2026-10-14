@@ -5,6 +5,16 @@ export class PublishError extends Error {}
 
 const PUBLISH_TIMEOUT_MS = 5000;
 
+/** The broker URL without credentials, safe to log and display. */
+export function brokerLabel(url) {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return 'invalid URL';
+  }
+}
+
 /** One long-lived MQTT connection shared by all hooks; mqtt.js reconnects on its own. */
 export function createPublisher(config, log) {
   const client = mqtt.connect(config.mqttUrl, {
@@ -16,13 +26,29 @@ export function createPublisher(config, log) {
     queueQoSZero: false,
   });
 
-  client.on('connect', () => log.info({ url: config.mqttUrl }, 'MQTT connected'));
-  client.on('offline', () => log.warn('MQTT offline'));
-  client.on('error', (err) => log.error({ err }, 'MQTT error'));
+  // For the dashboard: when the current connection came up, and the latest error.
+  let connectedSince = null;
+  let lastError = null;
+  client.on('connect', () => {
+    connectedSince = new Date();
+    log.info({ broker: brokerLabel(config.mqttUrl) }, 'MQTT connected');
+  });
+  client.on('offline', () => {
+    connectedSince = null;
+    log.warn('MQTT offline');
+  });
+  client.on('error', (err) => {
+    lastError = { message: err.message, at: new Date() };
+    log.error({ err }, 'MQTT error');
+  });
 
   return {
     get connected() {
       return client.connected;
+    },
+
+    get status() {
+      return { connected: client.connected, since: connectedSince, lastError, broker: brokerLabel(config.mqttUrl) };
     },
 
     async publish({ topic, payload, qos, retain }) {
