@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "lint": "eslint ."
   },
   "repository": {
     "type": "git",
@@ -32,7 +33,10 @@
     "pino": "^10.4.0"
   },
   "devDependencies": {
-    "aedes": "^1.2.0"
+    "@eslint/js": "^10.0.1",
+    "aedes": "^1.2.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
   },
   "type": "module",
   "engines": {

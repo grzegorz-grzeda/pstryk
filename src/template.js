@@ -38,7 +38,7 @@ export function render(template, ctx, opts = {}) {
     const value = lookup(ctx, path);
     if (value === undefined) throw new TemplateError(`Missing value for {{${path}}}`);
     const text = format(value, filter);
-    if (opts.topic && /[/+#\u0000]/.test(text)) {
+    if (opts.topic && (/[/+#]/.test(text) || text.includes('\0'))) {
       throw new TemplateError(`Value for {{${path}}} may not contain "/", "+", "#" in a topic`);
     }
     return text;
@@ -52,7 +52,8 @@ export function checkTemplate(template, { topic = false } = {}) {
   if (leftovers.includes('{{') || leftovers.includes('}}')) problems.push('Malformed {{ }} placeholder');
   if (topic) {
     if (!template.trim()) problems.push('Topic is required');
-    if (/[+#\u0000]/.test(template)) problems.push('Topic may not contain wildcards "+" or "#"');
+    if (/[+#]/.test(template)) problems.push('Topic may not contain wildcards "+" or "#"');
+    if (template.includes('\0')) problems.push('Topic may not contain null characters');
     if (template.startsWith('$')) problems.push('Topic may not start with "$"');
     if (Buffer.byteLength(template) > 1024) problems.push('Topic is too long');
   }
