@@ -1,0 +1,41 @@
+{
+  "name": "pstryk",
+  "version": "0.1.0",
+  "description": "A flick of a switch: token-protected webhooks that publish MQTT messages",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/grzegorz-grzeda/pstryk.git"
+  },
+  "keywords": [
+    "webhook",
+    "mqtt",
+    "automation"
+  ],
+  "author": "Grzegorz Grzęda",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/grzegorz-grzeda/pstryk/issues"
+  },
+  "homepage": "https://github.com/grzegorz-grzeda/pstryk#readme",
+  "dependencies": {
+    "@fastify/basic-auth": "^6.3.1",
+    "@fastify/formbody": "^9.0.1",
+    "@fastify/rate-limit": "^11.2.1",
+    "fastify": "^5.12.7",
+    "mongodb": "^7.7.0",
+    "mqtt": "^5.16.1",
+    "pino": "^10.4.0"
+  },
+  "devDependencies": {
+    "aedes": "^1.2.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,42 @@
+services:
+  pstryk:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRUST_PROXY: "true"
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PSTRYK_DOMAIN: ${PSTRYK_DOMAIN:?Set PSTRYK_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - pstryk
+
+  # Optional broker on the same host: `docker compose --profile broker up -d`
+  # with MQTT_URL=mqtt://mosquitto:1883 in .env. It is reachable only on the
+  # internal Docker network; see the README before exposing it to devices.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    profiles: ["broker"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./deploy/mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto_data:/mosquitto/data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  mosquitto_data:
